@@ -1,0 +1,7 @@
+/node-modules
+/.vscode
+/publish
+/util/configs
+/out
+/README.md
+/CHANGELOG

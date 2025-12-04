@@ -1,0 +1,42 @@
+{
+	"name": "eeprom-emulation",
+	"version": "1.0.0",
+	"description": "Various microcontrollers eeprom emulation libraries for decoding and encoding flash memories",
+	"author": {
+		"name": "mpursa",
+		"email": "m.pretto93@gmail.com",
+		"url": "https://github.com/mpursa"
+	},
+	"main": "lib/index.js",
+	"types": "lib/index.d.ts",
+	"files": [
+		"lib"
+	],
+	"scripts": {
+		"test": "node lib/test/emu.js",
+		"prepublish": "tsc",
+		"build": "tsc"
+	},
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/mpursa/eep-emu.git"
+	},
+	"license": "ISC",
+	"homepage": "https://github.com/mpursa/eep-emu",
+	"keywords": [
+		"EEprom",
+		"E2prom",
+		"EEprom emulation",
+		"microcontrollers",
+		"dataflash",
+		"NEC",
+		"RENESAS",
+		"v850e2",
+		"rh850"
+	],
+	"dependencies": {},
+	"devDependencies": {
+		"ts-node": "^10.9.2",
+		"typescript": "^5.9.3"
+	}
+}
