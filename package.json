@@ -1,6 +1,6 @@
 {
-	"name": "eeprom-emulation",
-	"version": "1.0.0",
+	"name": "eep-emu",
+	"version": "1.0.1",
 	"description": "Various microcontrollers eeprom emulation libraries for decoding and encoding flash memories",
 	"author": {
 		"name": "mpursa",
