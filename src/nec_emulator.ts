@@ -1,9 +1,4 @@
 /**
- * MODULE IMPORTS
- */
-import fs from 'fs';
-
-/**
  * GLOBALS
  */
 export type EepData = {
@@ -87,6 +82,10 @@ export class NecEmulator {
 		return this._activeBlocks;
 	}
 
+	protected get dfSize(): number {
+		return this._dfBuffer.length;
+	}
+
 	protected set eepData(data: List<EepData>) {
 		this._eepData = data;
 	}
@@ -101,23 +100,17 @@ export class NecEmulator {
 	///////////////// METHODS //////////////////////
 
 	/**
-	 * Log all eeprom data.
-	 * If the argument is left undefined the log will go to the console.
+	 * Log all eeprom data to a string.
 	 *
-	 * @param {string} [fileName] - File path to log to.
-	 * @returns {void}
+	 * @returns {string} Resulting text string
 	 */
-	public logEeprom(fileName?: string): void {
+	public logEepromDataToString(): string {
 		let finalStr: string = ``;
 		for (let key in this._eepData) {
-			if (fileName) {
-				finalStr = finalStr.concat(this.eepIdToStr(this._eepData[key]));
-			} else {
-				this.logEepId(this._eepData[key]);
-			}
+			finalStr = finalStr.concat(this.eepIdToStr(this._eepData[key]));
 		}
 
-		if (fileName) fs.writeFileSync(fileName, finalStr);
+		return finalStr;
 	}
 
 	/**
@@ -376,5 +369,46 @@ export class NecEmulator {
 		}
 
 		return res & 0xff;
+	}
+
+	/**
+	 * Find highest erase counter in block data, then create the word to write in the dataflash,
+	 * complete with 8bit checksum.
+	 *
+	 * @returns {Buffer} Erase counter word.
+	 */
+	protected getEraseCounterBuf(): Buffer {
+		let result: Buffer = Buffer.alloc(4);
+		let eraseCounterN: number = 0;
+		for (let block in this._blockData) {
+			eraseCounterN =
+				this._blockData[block].isValid && eraseCounterN < this._blockData[block].eraseCount
+					? this._blockData[block].eraseCount
+					: eraseCounterN;
+		}
+		let eraseCounter: Buffer = this.int32ToWord(eraseCounterN, true);
+		let cks: number = 0xff - this.checkSum8bit(eraseCounter, 0, 3);
+
+		eraseCounter.copy(result, 0, 0, 3);
+		result[3] = cks;
+
+		return result;
+	}
+
+	/**
+	 * Create valid rwp word from value, complete with 8bit checksum.
+	 *
+	 * @param {number} rwp - RWP numeric value.
+	 * @returns {Buffer} Erase counter word.
+	 */
+	protected getRwpBuf(rwp: number): Buffer {
+		let result: Buffer = Buffer.alloc(4);
+		let rwpBuf: Buffer = this.int32ToWord(rwp, true);
+		let cks: number = 0xff - this.checkSum8bit(rwpBuf, 0, 3);
+
+		rwpBuf.copy(result, 0, 0, 3);
+		result[3] = cks;
+
+		return result;
 	}
 }

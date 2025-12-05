@@ -125,19 +125,19 @@ export class Emu_RH850 extends NecEmulator {
 	}
 
 	/**
-	 * Read all data entries in page until the last valid one is found.
-	 * The rwp address that is found is relative to the page.
+	 * Read all data entries in block until the last valid one is found.
+	 * The rwp address that is found is relative to the block.
 	 *
-	 * @param {EepPage} page - Page data to scan.
+	 * @param {DataFlashBlock} block - Block data to scan.
 	 * @returns {number} Assumed RWP address.
 	 */
-	private findActiveRwp(page: DataFlashBlock): number {
+	private findActiveRwp(block: DataFlashBlock): number {
 		// First possible address in block.
 		let rwp: number = 0x28;
 		let rwp_hypo: number = rwp;
 		let dwp: number = 0x7f8;
 		while (rwp < dwp) {
-			let dataEntry: EepData | undefined = this.readDataEntry(page, rwp - 4);
+			let dataEntry: EepData | undefined = this.readDataEntry(block, rwp - 4);
 			if (dataEntry && dataEntry.widx === dwp) {
 				rwp_hypo = rwp;
 				dwp -= dataEntry.length * 4;
@@ -291,5 +291,87 @@ export class Emu_RH850 extends NecEmulator {
 			// Checksum rwp.
 			0xff === this.checkSum8bit(buf, 0x14, 0x17)
 		);
+	}
+
+	/**
+	 * Create dataflash buffer from eeprom data.
+	 *
+	 * @param {Buffer} [blankWord] - Word to use to signal erased cells. Must be 4 bytes. Defaults to "BLAN".
+	 * @returns {Buffer} Resulting dataflash buffer.
+	 */
+	public createDataFlashBuffer(blankWord: Buffer = Buffer.from('BLAN')): Buffer {
+		if (blankWord.length !== 4) {
+			throw new Error(
+				`Invalid BLANK WORD, must be of length 4, received length ${blankWord.length}`
+			);
+		}
+
+		let size: number = this.dfSize;
+		let result: Buffer = Buffer.alloc(size);
+		const activeFlag: Buffer = this.int32ToWord(ACTIVE_FLAG, true);
+		result.fill(blankWord);
+
+		let eraseCounter: Buffer = this.getEraseCounterBuf();
+		// Initialize rwp not with 0, since first page won't have it.
+		// Use a random address from the last block, it will be ignored by the library.
+		// It must be with 0x8 at the end, since all rwp are like that.
+		let rwp: number = (this.nBlocks - 1) * this.blockSize + 0x178;
+		let dataIdIndex: number = 0;
+		for (let i = 0; i < this.nBlocks; i++) {
+			let blockBuf: Buffer = Buffer.alloc(this.blockSize);
+			// Fill everything with deleted words.
+			blockBuf.fill(blankWord);
+			// Set block as prepared.
+			activeFlag.copy(blockBuf, 4);
+			// Add erase counter.
+			eraseCounter.copy(blockBuf, 0x10);
+			// Add rwp, only if last block is completely full.
+			if (rwp !== 0) {
+				this.getRwpBuf(rwp).copy(blockBuf, 0x14);
+				// Activate block.
+				activeFlag.copy(blockBuf, 8);
+				activeFlag.copy(blockBuf, 0xc);
+			}
+
+			// First reference address.
+			let idIndex: number = 0x18;
+			// First data address.
+			let dataIndex: number = 0x7f8;
+			rwp = 0;
+			// Add data to block.
+			while (dataIdIndex < this._dataTable.entries) {
+				let data: EepData = this.eepData[dataIdIndex];
+				if (idIndex + 0x10 >= dataIndex - data.length + 4) {
+					rwp = idIndex + this.blockSize * i;
+
+					break;
+				}
+
+				// HEADER
+				activeFlag.copy(blockBuf, idIndex);
+				activeFlag.copy(blockBuf, idIndex + 4);
+				activeFlag.copy(blockBuf, idIndex + 8);
+				let idBuf: Buffer = this.int32ToWord(data.id, true);
+				let dataIndexBuf: Buffer = this.int32ToWord(dataIndex, true);
+				let entryWord: Buffer = Buffer.alloc(4);
+				idBuf.copy(entryWord, 0, 0, 2);
+				dataIndexBuf.copy(entryWord, 2, 0, 2);
+				entryWord.copy(blockBuf, idIndex + 0xc);
+				idIndex += 0x10;
+
+				// DATA
+				for (let wordNum of data.data) {
+					let word: Buffer = this.int32ToWord(wordNum, true);
+					word.copy(blockBuf, dataIndex);
+					dataIndex -= 4;
+				}
+
+				dataIdIndex++;
+			}
+
+			blockBuf.copy(result, i * this.blockSize);
+		}
+
+		return result;
 	}
 }
