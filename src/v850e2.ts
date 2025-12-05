@@ -1,8 +1,7 @@
 /**
  * INTERNAL IMPORTS
  */
-import { DataFlashBlock, NecEmulator } from './nec_emulator';
-import { Global, List } from './global';
+import { DataFlashBlock, NecEmulator, List } from './nec_emulator';
 
 /**
  * GLOBALS
@@ -54,7 +53,7 @@ export class Emu_V850e2 extends NecEmulator {
 			blocks[i] = {
 				id: i,
 				isValid: this.isValidBlock(blockBuffer),
-				eraseCount: Global.readUint32(blockBuffer.subarray(0x28, 0x2b)),
+				eraseCount: this.readUint32(blockBuffer.subarray(0x28, 0x2b)),
 				rwp: 0,
 				buf: blockBuffer,
 			};
@@ -63,7 +62,7 @@ export class Emu_V850e2 extends NecEmulator {
 				continue;
 			}
 			// Add the rwp to the found ones.
-			rwps.push(Global.readUint32(blockBuffer.subarray(0x30, 0x33)) * 2);
+			rwps.push(this.readUint32(blockBuffer.subarray(0x30, 0x33)) * 2);
 		}
 
 		// Give the rwp to the correct block, since the rwp for a block is written in the following one.
@@ -86,9 +85,9 @@ export class Emu_V850e2 extends NecEmulator {
 	private isValidBlock(blockBuffer: Buffer): boolean {
 		return (
 			blockBuffer.length === this.blockSize &&
-			ACTIVE_FLAG === Global.readUint32(blockBuffer, 0x10) &&
-			ACTIVE_FLAG === Global.readUint32(blockBuffer, 0x18) &&
-			ACTIVE_FLAG === Global.readUint32(blockBuffer, 0x20)
+			ACTIVE_FLAG === this.readUint32(blockBuffer, 0x10) &&
+			ACTIVE_FLAG === this.readUint32(blockBuffer, 0x18) &&
+			ACTIVE_FLAG === this.readUint32(blockBuffer, 0x20)
 		);
 	}
 
@@ -108,14 +107,14 @@ export class Emu_V850e2 extends NecEmulator {
 		let isLastBlock: boolean = block === this.activeBlocks.at(this.activeBlocks.length - 1);
 		let nextBlock: number | undefined = isLastBlock ? undefined : this.activeBlocks[blockId + 1];
 		// Read first reference word.
-		let word: number = Global.readUint32(this.blockData[block].buf, 0x40);
+		let word: number = this.readUint32(this.blockData[block].buf, 0x40);
 		let addr: number = i * 0x10 + block * this.blockSize;
 		// Iterate through each reference until we reach the end of the block.
 		while (word !== REF_END_FLAG) {
 			let refAddr: number = i * 0x10 + this.blockSize * block;
 			let widx: number = word >> 16;
 			let id: number = word & 0xffff;
-			let cksRef: number = Global.readUint32(this.blockData[block].buf, i * 0x10 + 0x08);
+			let cksRef: number = this.readUint32(this.blockData[block].buf, i * 0x10 + 0x08);
 			let dataEntry: number[] = [];
 			// We do not want to throw if one data entry is corrupted, so just log it and move along.
 			try {
@@ -128,7 +127,7 @@ export class Emu_V850e2 extends NecEmulator {
 				// Add the data entry as a buffer also.
 				let dataBuf: Buffer = Buffer.alloc(dataEntry.length * 4);
 				for (let j = 0; j < dataEntry.length; j++) {
-					let word: Buffer = Global.int32ToWord(dataEntry[j]);
+					let word: Buffer = this.int32ToWord(dataEntry[j]);
 					word.copy(dataBuf, j * 4);
 				}
 
@@ -145,7 +144,7 @@ export class Emu_V850e2 extends NecEmulator {
 			}
 
 			// Read the next reference.
-			word = Global.readUint32(this.blockData[block].buf, ++i * 0x10);
+			word = this.readUint32(this.blockData[block].buf, ++i * 0x10);
 			addr = i * 0x10 + block * this.blockSize;
 			// We reached the last reference, we can stop the loop.
 			if (this.blockData[block].rwp && addr >= this.blockData[block].rwp) {
@@ -177,7 +176,7 @@ export class Emu_V850e2 extends NecEmulator {
 		let ofs: number = 0;
 		let cks: number = 0xffffffff - id;
 		let addr: number = (widx - ofs) * 8;
-		let word: number = Global.readUint32(this.dfBuffer, addr);
+		let word: number = this.readUint32(this.dfBuffer, addr);
 		// Length is the first 2 bytes of packet.
 		// Round to next multiple of 4.
 		let fixL: number = Math.ceil((word & 0xffff) / 4);
@@ -193,13 +192,13 @@ export class Emu_V850e2 extends NecEmulator {
 					);
 					data.push(...finishingData);
 				} else {
-					throw new RangeError(`Missing next block, invalid data for id ${Global.toHexString(id)}`);
+					throw new RangeError(`Missing next block, invalid data for id ${this.toHexString(id)}`);
 				}
 
 				break;
 			}
 			// Read from full file buffer here, address is absolute, not block relative.
-			word = Global.readUint32(this.dfBuffer, addr);
+			word = this.readUint32(this.dfBuffer, addr);
 			data.push(word);
 			// Set next address.
 			addr = (widx - ++ofs) * 8;
@@ -214,7 +213,7 @@ export class Emu_V850e2 extends NecEmulator {
 		// Check if the checksum in the reference is the same as the one we calculated with the data found.
 		if (cks !== cksRef) {
 			throw new Error(
-				`Invalid checksum for id ${Global.toHexString(id)}, address ${Global.toHexString(widx * 8)}`
+				`Invalid checksum for id ${this.toHexString(id)}, address ${this.toHexString(widx * 8)}`
 			);
 		}
 
@@ -235,7 +234,7 @@ export class Emu_V850e2 extends NecEmulator {
 		let ofs: number = 0;
 		do {
 			let addr: number = blockBuf.length - 8 - ofs * 8;
-			let word: number = Global.readUint32(blockBuf, addr);
+			let word: number = this.readUint32(blockBuf, addr);
 			endData.push(word);
 			ofs++;
 		} while (endData.length + startL < fixL);

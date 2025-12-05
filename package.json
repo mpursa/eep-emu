@@ -1,6 +1,6 @@
 {
 	"name": "eep-emu",
-	"version": "1.0.1",
+	"version": "1.0.3",
 	"description": "Various microcontrollers eeprom emulation libraries for decoding and encoding flash memories",
 	"author": {
 		"name": "mpursa",
@@ -10,12 +10,15 @@
 	"main": "lib/index.js",
 	"types": "lib/index.d.ts",
 	"files": [
-		"lib"
+		"/lib/**.js",
+		"/lib/**.d.ts"
 	],
 	"scripts": {
-		"test": "node lib/test/emu.js",
-		"prepublish": "tsc",
-		"build": "tsc"
+		"build": "tsc",
+		"clean": "npx ts-node util/clean.ts",
+		"prepublish": "npm run rebuild",
+		"rebuild": "npm run clean && npm run build",
+		"test": "node lib/test/emu.js"
 	},
 	"repository": {
 		"type": "git",

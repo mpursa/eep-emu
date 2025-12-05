@@ -1,8 +1,7 @@
 /**
  * INTERNAL IMPORTS
  */
-import { DataFlashBlock, EepData, NecEmulator } from './nec_emulator';
-import { Global, List } from './global';
+import { DataFlashBlock, EepData, NecEmulator, List } from './nec_emulator';
 
 /**
  * GLOBALS
@@ -90,10 +89,10 @@ export class Emu_RH850 extends NecEmulator {
 	 */
 	private readDataEntry(block: DataFlashBlock, refAddr: number): EepData | undefined {
 		let refAbsAddr: number = refAddr + BLOCK_SIZE * block.id;
-		let checkW1: number = Global.readUint32(block.buf, refAddr - 0x4);
-		let checkW2: number = Global.readUint32(block.buf, refAddr - 0x8);
-		let checkW3: number = Global.readUint32(block.buf, refAddr - 0xc);
-		let word: number = Global.readUint32(block.buf, refAddr);
+		let checkW1: number = this.readUint32(block.buf, refAddr - 0x4);
+		let checkW2: number = this.readUint32(block.buf, refAddr - 0x8);
+		let checkW3: number = this.readUint32(block.buf, refAddr - 0xc);
+		let word: number = this.readUint32(block.buf, refAddr);
 		let widx: number = word >> 0x10;
 		let id: number = word & 0xffff;
 		if (
@@ -112,10 +111,10 @@ export class Emu_RH850 extends NecEmulator {
 
 		let nWord: number = Math.ceil(entry.length);
 		for (let j = 0; j < nWord; j++) {
-			entry.data.push(Global.readUint32(block.buf, widx - j * 4));
+			entry.data.push(this.readUint32(block.buf, widx - j * 4));
 		}
 		for (let j = 0; j < entry.data.length; j++) {
-			let word: Buffer = Global.int32ToWord(entry.data[j]);
+			let word: Buffer = this.int32ToWord(entry.data[j]);
 			word.copy(entry.dataBuf, j * 4);
 		}
 		entry.widx = widx;
@@ -126,19 +125,19 @@ export class Emu_RH850 extends NecEmulator {
 	}
 
 	/**
-	 * Read all data entries in page until the last valid one is found.
-	 * The rwp address that is found is relative to the page.
+	 * Read all data entries in block until the last valid one is found.
+	 * The rwp address that is found is relative to the block.
 	 *
-	 * @param {EepPage} page - Page data to scan.
+	 * @param {DataFlashBlock} block - Block data to scan.
 	 * @returns {number} Assumed RWP address.
 	 */
-	private findActiveRwp(page: DataFlashBlock): number {
+	private findActiveRwp(block: DataFlashBlock): number {
 		// First possible address in block.
 		let rwp: number = 0x28;
 		let rwp_hypo: number = rwp;
 		let dwp: number = 0x7f8;
 		while (rwp < dwp) {
-			let dataEntry: EepData | undefined = this.readDataEntry(page, rwp - 4);
+			let dataEntry: EepData | undefined = this.readDataEntry(block, rwp - 4);
 			if (dataEntry && dataEntry.widx === dwp) {
 				rwp_hypo = rwp;
 				dwp -= dataEntry.length * 4;
@@ -169,19 +168,19 @@ export class Emu_RH850 extends NecEmulator {
 	private getDataTable(): RhTable {
 		if (this._cfBuf.length < this._tableHeaderAddr + 0x10) {
 			throw new RangeError(
-				`Invalid table header address ${Global.toHexString(
+				`Invalid table header address ${this.toHexString(
 					this._tableHeaderAddr
-				)}, the codeflash is ${Global.toHexString(this._cfBuf.length)} bytes`
+				)}, the codeflash is ${this.toHexString(this._cfBuf.length)} bytes`
 			);
 		}
 
 		return {
-			blockSize: Global.readUint32(this._cfBuf, this._tableHeaderAddr) & 0xffff,
-			prepBlocks_min: Global.readUint32(this._cfBuf, this._tableHeaderAddr) >> 0x10,
-			pointer_rom: Global.readUint32(this._cfBuf, this._tableHeaderAddr + 0x04),
-			pointer_ram: Global.readUint32(this._cfBuf, this._tableHeaderAddr + 0x08),
-			entries: Global.readUint32(this._cfBuf, this._tableHeaderAddr + 0x0c) & 0xffff,
-			eraseSuspend: Global.readUint32(this._cfBuf, this._tableHeaderAddr + 0x0c) >> 0x10,
+			blockSize: this.readUint32(this._cfBuf, this._tableHeaderAddr) & 0xffff,
+			prepBlocks_min: this.readUint32(this._cfBuf, this._tableHeaderAddr) >> 0x10,
+			pointer_rom: this.readUint32(this._cfBuf, this._tableHeaderAddr + 0x04),
+			pointer_ram: this.readUint32(this._cfBuf, this._tableHeaderAddr + 0x08),
+			entries: this.readUint32(this._cfBuf, this._tableHeaderAddr + 0x0c) & 0xffff,
+			eraseSuspend: this.readUint32(this._cfBuf, this._tableHeaderAddr + 0x0c) >> 0x10,
 		};
 	}
 
@@ -202,7 +201,7 @@ export class Emu_RH850 extends NecEmulator {
 		);
 		// Table data acquisition and validation.
 		for (let i = 0; i < table.length; i += 4) {
-			let word: number = Global.readUint32(table, i);
+			let word: number = this.readUint32(table, i);
 			let length: number = word >> 16;
 			let id: number = word & 0xffff;
 			// Already prepare each eeprom id.
@@ -219,7 +218,7 @@ export class Emu_RH850 extends NecEmulator {
 			// Length cannot be > BLOCK_SIZE beacuase there's no overlap system in RH850.
 			if (length > BLOCK_SIZE) {
 				throw new Error(
-					`Invalid rh850 table (id -> ${Global.toHexString(id, 4)}, length -> ${Global.toHexString(
+					`Invalid rh850 table (id -> ${this.toHexString(id, 4)}, length -> ${this.toHexString(
 						length,
 						4
 					)})`
@@ -248,7 +247,7 @@ export class Emu_RH850 extends NecEmulator {
 			blocks[i] = {
 				id: i,
 				isValid: this.isValidBlock(blockBuffer),
-				eraseCount: Global.readUint32(blockBuffer.subarray(0x10, 0x13)),
+				eraseCount: this.readUint32(blockBuffer.subarray(0x10, 0x13)),
 				rwp: 0,
 				buf: blockBuffer,
 			};
@@ -257,7 +256,7 @@ export class Emu_RH850 extends NecEmulator {
 				continue;
 			}
 			// Add the rwp to the found ones.
-			rwps.push(Global.readUint32(blockBuffer.subarray(0x14, 0x17)));
+			rwps.push(this.readUint32(blockBuffer.subarray(0x14, 0x17)));
 		}
 
 		// Give the rwp to the correct block, since the rwp for a block is written in the following one.
@@ -277,9 +276,9 @@ export class Emu_RH850 extends NecEmulator {
 	private isValidBlock(buf: Buffer): boolean {
 		return (
 			// Prepare and active flags must be 55 55 55 55.
-			ACTIVE_FLAG === Global.readUint32(buf, 0x4) &&
-			ACTIVE_FLAG === Global.readUint32(buf, 0x8) &&
-			ACTIVE_FLAG === Global.readUint32(buf, 0xc) &&
+			ACTIVE_FLAG === this.readUint32(buf, 0x4) &&
+			ACTIVE_FLAG === this.readUint32(buf, 0x8) &&
+			ACTIVE_FLAG === this.readUint32(buf, 0xc) &&
 			// Invalid flags must not be 55 55 55 55.
 			/**
 			 * @note @mpursa
@@ -288,9 +287,91 @@ export class Emu_RH850 extends NecEmulator {
 			 * All the other flags and checksums are written, so they must be correct!
 			 */
 			// Checksum erase counter.
-			0xff === Global.checkSum8bit(buf, 0x10, 0x13) &&
+			0xff === this.checkSum8bit(buf, 0x10, 0x13) &&
 			// Checksum rwp.
-			0xff === Global.checkSum8bit(buf, 0x14, 0x17)
+			0xff === this.checkSum8bit(buf, 0x14, 0x17)
 		);
+	}
+
+	/**
+	 * Create dataflash buffer from eeprom data.
+	 *
+	 * @param {Buffer} [blankWord] - Word to use to signal erased cells. Must be 4 bytes. Defaults to "BLAN".
+	 * @returns {Buffer} Resulting dataflash buffer.
+	 */
+	public createDataFlashBuffer(blankWord: Buffer = Buffer.from('BLAN')): Buffer {
+		if (blankWord.length !== 4) {
+			throw new Error(
+				`Invalid BLANK WORD, must be of length 4, received length ${blankWord.length}`
+			);
+		}
+
+		let size: number = this.dfSize;
+		let result: Buffer = Buffer.alloc(size);
+		const activeFlag: Buffer = this.int32ToWord(ACTIVE_FLAG, true);
+		result.fill(blankWord);
+
+		let eraseCounter: Buffer = this.getEraseCounterBuf();
+		// Initialize rwp not with 0, since first page won't have it.
+		// Use a random address from the last block, it will be ignored by the library.
+		// It must be with 0x8 at the end, since all rwp are like that.
+		let rwp: number = (this.nBlocks - 1) * this.blockSize + 0x178;
+		let dataIdIndex: number = 0;
+		for (let i = 0; i < this.nBlocks; i++) {
+			let blockBuf: Buffer = Buffer.alloc(this.blockSize);
+			// Fill everything with deleted words.
+			blockBuf.fill(blankWord);
+			// Set block as prepared.
+			activeFlag.copy(blockBuf, 4);
+			// Add erase counter.
+			eraseCounter.copy(blockBuf, 0x10);
+			// Add rwp, only if last block is completely full.
+			if (rwp !== 0) {
+				this.getRwpBuf(rwp).copy(blockBuf, 0x14);
+				// Activate block.
+				activeFlag.copy(blockBuf, 8);
+				activeFlag.copy(blockBuf, 0xc);
+			}
+
+			// First reference address.
+			let idIndex: number = 0x18;
+			// First data address.
+			let dataIndex: number = 0x7f8;
+			rwp = 0;
+			// Add data to block.
+			while (dataIdIndex < this._dataTable.entries) {
+				let data: EepData = this.eepData[dataIdIndex];
+				if (idIndex + 0x10 >= dataIndex - data.length + 4) {
+					rwp = idIndex + this.blockSize * i;
+
+					break;
+				}
+
+				// HEADER
+				activeFlag.copy(blockBuf, idIndex);
+				activeFlag.copy(blockBuf, idIndex + 4);
+				activeFlag.copy(blockBuf, idIndex + 8);
+				let idBuf: Buffer = this.int32ToWord(data.id, true);
+				let dataIndexBuf: Buffer = this.int32ToWord(dataIndex, true);
+				let entryWord: Buffer = Buffer.alloc(4);
+				idBuf.copy(entryWord, 0, 0, 2);
+				dataIndexBuf.copy(entryWord, 2, 0, 2);
+				entryWord.copy(blockBuf, idIndex + 0xc);
+				idIndex += 0x10;
+
+				// DATA
+				for (let wordNum of data.data) {
+					let word: Buffer = this.int32ToWord(wordNum, true);
+					word.copy(blockBuf, dataIndex);
+					dataIndex -= 4;
+				}
+
+				dataIdIndex++;
+			}
+
+			blockBuf.copy(result, i * this.blockSize);
+		}
+
+		return result;
 	}
 }
